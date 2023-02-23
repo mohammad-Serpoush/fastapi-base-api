@@ -9,6 +9,7 @@ from app import services, models, schemas
 from app.constants.role import Role
 from app.core import security
 from app.core.config import settings
+from app.core.exception import raise_http_exception
 from app.db.session import SessionLocal
 from fastapi import Depends, HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer, SecurityScopes
@@ -22,10 +23,7 @@ from pydantic import UUID4
 
 
 class CustomOAuth2PasswordBearer(OAuth2PasswordBearer):
-    async def __call__(self,
-                       request: Request = None,
-                       websocket: WebSocket = None
-                       ):
+    async def __call__(self, request: Request = None, websocket: WebSocket = None):
         return await super().__call__(websocket or request)
 
 
@@ -36,7 +34,6 @@ reusable_oauth2 = CustomOAuth2PasswordBearer(
         Role.USER["name"]: Role.USER["description"],
     },
 )
-
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -121,6 +118,7 @@ def get_current_user(
         detail=Error.USER_PASS_WRONG_ERROR["text"],
         headers={"WWW-Authenticate": authenticate_value},
     )
+    token_data = None
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
@@ -129,10 +127,7 @@ def get_current_user(
             raise credentials_exception
         token_data = schemas.TokenPayload(**payload)
     except Exception:
-        raise HTTPException(
-            status_code=Error.TOKEN_NOT_EXIST_OR_EXPIRATION_ERROR["status_code"],
-            detail=Error.TOKEN_NOT_EXIST_OR_EXPIRATION_ERROR["text"],
-        )
+        raise_http_exception(Error.TOKEN_NOT_EXIST_OR_EXPIRATION_ERROR)
 
     user = get_user_from_cache(redis_client, db, token_data.id)
 
@@ -144,8 +139,7 @@ def get_current_user(
             detail=Error.PERMISSION_DENIED_ERROR["text"],
             headers={"WWW-Authenticate": authenticate_value},
         )
-    if security_scopes.scopes and \
-            token_data.role not in security_scopes.scopes:
+    if security_scopes.scopes and token_data.role not in security_scopes.scopes:
         raise HTTPException(
             status_code=Error.PERMISSION_DENIED_ERROR["status_code"],
             detail=Error.PERMISSION_DENIED_ERROR["text"],
@@ -161,8 +155,5 @@ def get_current_active_user(
     ),
 ) -> models.User:
     if not services.user.is_active(current_user):
-        raise HTTPException(
-            status_code=Error.INACTIVE_USER["status_code"],
-            detail=Error.INACTIVE_USER["text"],
-        )
+        raise_http_exception(Error.INACTIVE_USER["status_code"])
     return current_user

@@ -8,7 +8,7 @@ load_dotenv()
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Botinow Backend Api"
+    PROJECT_NAME: str = "Base Backend Api"
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
@@ -54,7 +54,7 @@ class Settings(BaseSettings):
 
     @validator("CELERY_URI", pre=True)
     def assemble_celery_connection(
-            cls, v: Optional[str], values: Dict[str, Any]
+        cls, v: Optional[str], values: Dict[str, Any]
     ) -> Any:
         if isinstance(v, str):
             return v

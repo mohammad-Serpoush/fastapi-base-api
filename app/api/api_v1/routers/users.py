@@ -1,11 +1,12 @@
 from typing import Any
 from app import services, models, schemas
 from app.api import deps
+from app.core.exception import raise_http_exception
+from app.core.unit_of_work import UnitOfWork
 from app.constants.role import Role
 from app.constants.errors import Error
-from fastapi import APIRouter, Depends, HTTPException, Security, status
+from fastapi import APIRouter, Depends, Security, status
 from sqlalchemy.orm import Session
-
 
 router = APIRouter(prefix="/user", tags=["User"])
 
@@ -19,13 +20,11 @@ def register_user(
     """
     register user
     """
-    user = services.user.get_by_email(db, email=user_in.email)
-    if user:
-        raise HTTPException(
-            status_code=Error.USER_EXIST_ERROR["status_code"],
-            detail=Error.USER_EXIST_ERROR["text"],
-        )
-    user = services.user.register(db, obj_in=user_in)
+    with UnitOfWork(db) as uow:
+        user = services.user.get_by_email(uow, email=user_in.email)
+        if user:
+            raise_http_exception(Error.USER_EXIST_ERROR)
+        services.user.register(uow, obj_in=user_in)
     return
 
 
@@ -41,27 +40,9 @@ def update_user_me(
         ],
     ),
 ) -> Any:
-    user = services.user.get(db, id=current_user.id)
-    user = services.user.update(db, db_obj=user, obj_in=user_in)
-
-    return user
-
-
-@router.put("/", response_model=schemas.User)
-def change_password_me(
-    *,
-    db: Session = Depends(deps.get_db),
-    user_in: schemas.UserUpdatePassword,
-    current_user: models.User = Security(
-        deps.get_current_active_user,
-        scopes=[
-            Role.ADMIN["name"],
-            Role.USER["name"],
-        ],
-    ),
-) -> Any:
-    user = services.user.get(db, id=current_user.id)
-    user = services.user.change_password(db, user_id=user.id, obj_in=user_in)
+    with UnitOfWork(db) as uow:
+        db_user = services.user.get(uow, id=current_user.id)
+        user = services.user.update(uow, db_obj=db_user, obj_in=user_in)
 
     return user
 
@@ -78,5 +59,6 @@ def get_user_me(
         ],
     ),
 ) -> Any:
-    user = services.user.get(db, id=current_user.id)
+    with UnitOfWork(db) as uow:
+        user = services.user.get(uow, id=current_user.id)
     return user
