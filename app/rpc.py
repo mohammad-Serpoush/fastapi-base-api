@@ -15,5 +15,4 @@ def serve():
 
 if __name__ == "__main__":
     print("Running rpc server on localhost:5001")
-
     serve()
